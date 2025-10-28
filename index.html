@@ -1,0 +1,2271 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Сопоставление — полностью восстановленный + яркая подсветка</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        --bg-color: #ffffff;
+        --text-color: #000000;
+        --header-bg: #f4f4f4;
+        --border-color: #ccc;
+        --toolbar-height: 56px;
+        --page-max-width: 1100px;
+        --danger: #dc2626;
+        --danger-strong: #b91c1c;
+        --muted: #6b7280;
+        --purple: #8b5cf6;
+        --purple-dark: #6d28d9;
+      }
+      .dark {
+        --bg-color: #1e1e1e;
+        --text-color: #e0e0e0;
+        --header-bg: #333333;
+        --border-color: #555555;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        max-width: var(--page-max-width);
+        margin: 0 auto;
+        background: var(--bg-color);
+        color: var(--text-color);
+        box-sizing: border-box;
+      }
+
+      /* --- FIXED toolbar --- */
+      #toolbar {
+        position: fixed;
+        top: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1400;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.94);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        backdrop-filter: blur(6px);
+        height: var(--toolbar-height);
+        width: calc(100% - 40px);
+        max-width: calc(var(--page-max-width) - -200px);
+        overflow: hidden;
+        transition: box-shadow 180ms ease, background 180ms ease;
+      }
+      #toolbar.scrolled {
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
+        background: rgba(255, 255, 255, 0.98);
+      }
+      .dark #toolbar {
+        background: rgba(14, 14, 14, 0.95);
+        border-color: var(--border-color);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+      }
+
+      #toolbarPlaceholder {
+        height: var(--toolbar-height);
+        margin-bottom: 16px;
+        display: block;
+      }
+
+      @media (max-width: 520px) {
+        #toolbar {
+          gap: 6px;
+          padding: 6px;
+          height: 48px;
+          border-radius: 10px;
+        }
+        #toolbar button {
+          padding: 6px 8px;
+          font-size: 13px;
+        }
+        #toolbarPlaceholder {
+          height: 48px;
+        }
+      }
+
+      .input-block {
+        margin-bottom: 12px;
+      }
+      textarea {
+        width: 100%;
+        height: 80px;
+        font-family: monospace;
+        background: var(--bg-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        box-sizing: border-box;
+        padding: 8px;
+      }
+      button,
+      .color-btn,
+      .hide-btn,
+      .move-btn {
+        padding: 6px 10px;
+        font-size: 14px;
+        cursor: pointer;
+        margin-right: 6px;
+        background: var(--header-bg);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-weight: 700;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+      }
+      th,
+      td {
+        border: 1px solid var(--border-color);
+        padding: 8px;
+        vertical-align: middle;
+      }
+      th {
+        background: var(--header-bg);
+      }
+      .hidden-text td {
+        color: transparent;
+      }
+      .dragging {
+        opacity: 0.5;
+      }
+      .drag-over {
+        outline: 2px dashed #007bff;
+      }
+      .manual-yellow td {
+        background-color: rgba(255, 255, 0, 0.35);
+      }
+
+      /* яркая подсветка для сумм/количеств */
+      .sum-mismatch td:nth-child(4),
+      .sum-mismatch td:nth-child(7) {
+        background-color: rgba(220, 38, 38, 0.28);
+        color: #fff;
+        font-weight: 800;
+        border-left: 3px solid var(--danger-strong);
+      }
+      .qty-mismatch td:nth-child(5),
+      .qty-mismatch td:nth-child(8) {
+        background-color: rgba(220, 38, 38, 0.28);
+        color: #fff;
+        font-weight: 800;
+        border-left: 3px solid var(--danger-strong);
+      }
+
+      .tentative td {
+        background-color: rgba(255, 165, 0, 0.08);
+      }
+      .group-row td {
+        background: linear-gradient(
+          90deg,
+          rgba(0, 0, 0, 0.03),
+          rgba(0, 0, 0, 0.01)
+        );
+        font-weight: 700;
+        text-align: left;
+      }
+      .selected {
+        outline: 2px solid #007bff;
+      }
+      .name-cell {
+        cursor: pointer;
+      }
+      .name-selected {
+        outline: 2px solid #007bff;
+        box-shadow: inset 0 0 0 2px rgba(0, 123, 255, 0.08);
+        background-color: rgba(0, 123, 255, 0.04);
+      }
+      #focusBox {
+        position: absolute;
+        background: var(--bg-color);
+        pointer-events: none;
+        display: none;
+      }
+      tbody tr.group-row {
+        cursor: default;
+      }
+      .small {
+        font-size: 12px;
+        color: #666;
+      }
+      .num-match {
+        background-color: rgba(0, 255, 0, 0.45);
+        color: #000;
+        padding: 0 2px;
+        border-radius: 2px;
+        font-weight: 700;
+      }
+      .moving-source {
+        outline: 3px dashed #28a745;
+        background: rgba(40, 167, 69, 0.04);
+      }
+      .copy-sum,
+      .copy-qty {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-left: 6px;
+        padding: 0;
+        border-radius: 3px;
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+        border: 1px solid var(--border-color);
+        background: var(--header-bg);
+      }
+      #hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #444;
+      }
+      .sum-wrapper {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .sum-text {
+        white-space: nowrap;
+      }
+
+      /* totals in toolbar */
+      .toolbar-totals {
+        margin-left: auto;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        font-size: 13px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .totals-item {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        color: blue;
+      }
+      .totals-value {
+        font-weight: 700;
+        color: inherit;
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+      .totals-sum-mismatch {
+        box-shadow: 0 6px 18px rgba(220, 38, 38, 0.14);
+        color: #d51212;
+      }
+      .totals-qty-mismatch {
+        color: #fff;
+        box-shadow: 0 6px 18px rgba(220, 38, 38, 0.14);
+        color: #d51212;
+      }
+
+      /* color-word highlight (фиолетовый) */
+      .color-word {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 6px;
+        background-color: rgba(139, 92, 246, 0.14);
+        color: var(--purple-dark);
+        font-weight: 800;
+      }
+      .dark .color-word {
+        background-color: rgba(139, 92, 246, 0.22);
+        color: #fff;
+      }
+
+      /* cell flash */
+      .cell-flash {
+        animation: cellFlash 1000ms ease;
+        box-shadow: 0 6px 24px rgba(220, 38, 38, 0.22);
+        transform: translateZ(0);
+      }
+      @keyframes cellFlash {
+        0% {
+          background-color: rgba(220, 38, 38, 0.36);
+          color: #fff;
+          transform: translateY(-1px);
+        }
+        40% {
+          background-color: rgba(220, 38, 38, 0.28);
+          transform: translateY(0);
+        }
+        100% {
+          background-color: rgba(220, 38, 38, 0.2);
+        }
+      }
+
+      /* mismatch row flash */
+      .mismatch-focus {
+        animation: mismatchFlash 800ms ease;
+      }
+      @keyframes mismatchFlash {
+        0% {
+          box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+          transform: translateY(-2px);
+        }
+        20% {
+          box-shadow: 0 0 0 10px rgba(220, 38, 38, 0.1);
+          transform: translateY(0);
+        }
+        60% {
+          box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.06);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- toolbar -->
+    <div id="toolbar" role="toolbar" aria-label="Действия">
+      <button id="processBtn">Сопоставить</button>
+      <button id="groupSumsBtn">Сгруппировать по суммам</button>
+      <button id="sortSimBtn">Сортировать по схожести</button>
+      <button id="gotoMismatchBtn">Перейти к несходящему ↓</button>
+      <button id="toggleFocusBtn">🔍 Фокус</button>
+      <button id="toggleThemeBtn">🌙 Темный режим</button>
+      <button id="removeHiddenBtn">Убрать скрытые строки</button>
+
+      <div class="toolbar-totals" aria-hidden="false">
+        <div class="totals-item">
+          Итого (левый):
+          <span id="topLeftSum" class="totals-value">0,00</span> /
+          <span id="topLeftQty" class="totals-value">0</span>
+        </div>
+        <div class="totals-item">
+          Итого (правый):
+          <span id="topRightSum" class="totals-value">0,00</span> /
+          <span id="topRightQty" class="totals-value">0</span>
+        </div>
+      </div>
+    </div>
+    <div id="toolbarPlaceholder" aria-hidden="true"></div>
+
+    <h1>Сопоставление по имени, сумме и количеству</h1>
+
+    <div class="input-block">
+      <label>1. Наименования (по одному на строке):</label>
+      <textarea id="namesList" placeholder="Наименование"></textarea>
+    </div>
+    <div class="input-block">
+      <label>1. Суммы (формат 49 333,00):</label>
+      <textarea id="sumsList" placeholder="27 240,00"></textarea>
+    </div>
+    <div class="input-block">
+      <label>1. Количество (опционально, по одной записи на строку):</label>
+      <textarea id="qtyList" placeholder="10"></textarea>
+    </div>
+
+    <div class="input-block">
+      <label>2. Наименования (по одному на строке):</label>
+      <textarea id="names2List" placeholder="Наименование"></textarea>
+    </div>
+    <div class="input-block">
+      <label>2. Суммы (формат 27 240,01):</label>
+      <textarea id="sums2List" placeholder="27 240,01"></textarea>
+    </div>
+    <div class="input-block">
+      <label>2. Количество (опционально, по одной записи на строку):</label>
+      <textarea id="qty2List" placeholder="5"></textarea>
+    </div>
+
+    <div id="hint">
+      Подсвечиваются фиолетовым слова-цвета (включая сокращения:
+      <em>бел, кор, зел</em> и т.д.). Кнопка «Перейти к несходящему» циклично
+      прокручивает к строкам с несоответствиями и ярко подсвечивает
+      соответствующие ячейки.
+    </div>
+
+    <div id="output"></div>
+    <div id="focusBox"></div>
+
+    <script>
+      /* ---------------- toolbar visual behavior ---------------- */
+      (function toolbarInit() {
+        const toolbar = document.getElementById("toolbar");
+        if (!toolbar) return;
+        function onScroll() {
+          if (window.scrollY > 8) toolbar.classList.add("scrolled");
+          else toolbar.classList.remove("scrolled");
+        }
+        window.addEventListener("scroll", onScroll, { passive: true });
+        Array.from(toolbar.querySelectorAll("button")).forEach((btn) => {
+          btn.addEventListener("focus", () =>
+            toolbar.classList.add("scrolled")
+          );
+          btn.addEventListener("blur", () => setTimeout(onScroll, 10));
+        });
+        onScroll();
+      })();
+
+      /* ---------------- parsing / formatting ---------------- */
+      function parseSum(str) {
+        if (typeof str !== "string" && typeof str !== "number") return 0;
+        const s = String(str);
+        const noSpaces = s.replace(/\s/g, "");
+        const cleanedThousands = noSpaces.replace(/,(?=.*?,)/g, "");
+        const parsed = parseFloat(cleanedThousands.replace(",", "."));
+        return isNaN(parsed) ? 0 : parsed;
+      }
+      function formatSum(n) {
+        if (n === null || typeof n === "undefined") return "0,00";
+        const num = Number(n) || 0;
+        return num.toLocaleString("ru-RU", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+      function formatQty(n) {
+        if (n === null || typeof n === "undefined") return "0";
+        const num = Number(n) || 0;
+        if (Number.isInteger(num)) return num.toLocaleString("ru-RU");
+        return num.toLocaleString("ru-RU", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+      }
+
+      /* ---------------- levenshtein ---------------- */
+      function levenshtein(a, b) {
+        a = String(a || "");
+        b = String(b || "");
+        const lena = a.length,
+          lenb = b.length;
+        if (lena === 0) return lenb;
+        if (lenb === 0) return lena;
+        const prev = new Array(lenb + 1),
+          cur = new Array(lenb + 1);
+        for (let j = 0; j <= lenb; j++) prev[j] = j;
+        for (let i = 1; i <= lena; i++) {
+          cur[0] = i;
+          for (let j = 1; j <= lenb; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+          }
+          for (let j = 0; j <= lenb; j++) prev[j] = cur[j];
+        }
+        return prev[lenb];
+      }
+
+      /* ---------------- normalize / matching helpers ---------------- */
+      function normalizeName(s) {
+        if (!s) return "";
+        let str = String(s).toLowerCase();
+        try {
+          str = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        } catch (e) {}
+        str = str.replace(/[×xхX]/g, "x");
+        str = str.replace(/(\d+)\s*x\s*(\d+)/g, "$1 $2");
+        str = str.replace(/(\d+)\s*мм\b/g, "$1");
+        str = str.replace(/\bмм\b/g, "");
+        str = str.replace(/[.,\/\\()\[\]{}\-_:;"'«»–—…·*?]/g, " ");
+        try {
+          str = str.replace(/[^\p{L}\p{N}\s]+/gu, " ");
+        } catch (e) {
+          str = str.replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s]+/g, " ");
+        }
+        str = str.replace(/\s+/g, " ").trim();
+        if (!str) return "";
+
+        let tokens = str.split(" ").filter(Boolean);
+        const MAP = {
+          корич: "коричневый",
+          "корич.": "коричневый",
+          зел: "зеленый",
+          "зел.": "зеленый",
+          бел: "белый",
+          "бел.": "белый",
+          керамин: "керамогранит",
+          керам: "керамогранит",
+          керамограніт: "керамогранит",
+        };
+        tokens = tokens.map((t) => MAP[t] || t);
+
+        const newTokens = [];
+        for (let i = 0; i < tokens.length; i++) {
+          const t = tokens[i],
+            next = tokens[i + 1];
+          if (/^\d+$/.test(t) && /^\d+$/.test(next)) {
+            const a = parseInt(t, 10),
+              b = parseInt(next, 10);
+            const min = Math.min(a, b),
+              max = Math.max(a, b);
+            newTokens.push(`size:${min}x${max}`);
+            i++;
+            continue;
+          }
+          newTokens.push(t);
+        }
+
+        const expanded = [];
+        for (const t of newTokens) {
+          if (t.length > 3 && t.length % 2 === 0) {
+            const half = t.slice(0, t.length / 2);
+            if (half + half === t) {
+              expanded.push(half, half);
+              continue;
+            }
+          }
+          expanded.push(t);
+        }
+
+        const finalTokens = expanded.filter(Boolean).sort();
+        return finalTokens.join(" ");
+      }
+
+      function makeMatchKey(s) {
+        if (!s && s !== 0) return "";
+        let str = String(s).toLowerCase();
+        try {
+          str = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        } catch (e) {}
+        str = str.replace(/ё/g, "е");
+        const LAT_TO_CYR = {
+          a: "а",
+          e: "е",
+          o: "о",
+          p: "р",
+          c: "с",
+          y: "у",
+          x: "х",
+          k: "к",
+          m: "м",
+          h: "н",
+          b: "в",
+          t: "т",
+        };
+        str = str.replace(/[A-Za-z]/g, (ch) => LAT_TO_CYR[ch] || ch);
+        str = str.replace(/['ʼ’`´˝“”«»"]/g, "");
+        str = str.replace(/[ьъ]/g, "");
+        try {
+          str = str.replace(/[^\p{L}\p{N}\s:×x]/gu, " ");
+        } catch (e) {
+          str = str.replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s:×x]/g, " ");
+        }
+        str = str.replace(/\s+/g, " ").trim();
+        return str;
+      }
+
+      const MANUAL_MAP = {};
+      let DICTIONARY = [
+        "коричневый",
+        "зеленый",
+        "белый",
+        "керамогранит",
+        "плитка",
+        "карандаш",
+        "черный",
+        "серый",
+        "красный",
+      ];
+
+      function normTokenForMatch(t) {
+        return String(t || "")
+          .toLowerCase()
+          .replace(/\.$/, "");
+      }
+      function stripCommonEndings(t) {
+        return String(t).replace(
+          /(а|я|ки|ок|оков|ов|ы|и|ые|ое|ый|ий|ой|ых|ми|ами|ом|ем|ам|ям)$/i,
+          ""
+        );
+      }
+      function expandShortToken(token) {
+        if (!token) return token;
+        if (/^size:/.test(token) || /^\d+$/.test(token)) return token;
+        const t = normTokenForMatch(token);
+        if (MANUAL_MAP[t]) return MANUAL_MAP[t];
+        if (DICTIONARY.find((w) => w === t)) return t;
+        const stripped = stripCommonEndings(t);
+        if (stripped && stripped !== t) {
+          const byPrefix = DICTIONARY.find((w) => w.startsWith(stripped));
+          if (byPrefix) {
+            MANUAL_MAP[t] = byPrefix;
+            return byPrefix;
+          }
+        }
+        if (t.length <= 4) {
+          const byPrefix = DICTIONARY.find((w) => w.startsWith(t));
+          if (byPrefix) {
+            MANUAL_MAP[t] = byPrefix;
+            return byPrefix;
+          }
+        }
+        let best = null,
+          bestDist = Infinity;
+        for (const cand of DICTIONARY) {
+          const d = levenshtein(t, cand);
+          if (d < bestDist) {
+            bestDist = d;
+            best = cand;
+          }
+        }
+        const threshold = t.length <= 3 ? 1 : t.length <= 6 ? 2 : 3;
+        if (best && bestDist <= threshold) {
+          if (bestDist <= 1) MANUAL_MAP[t] = best;
+          return best;
+        }
+        return token;
+      }
+      function expandTokens(tokens) {
+        return tokens.map((t) => expandShortToken(t));
+      }
+      function learnDictionaryFromCorpus(lines) {
+        const freq = {};
+        lines.forEach((line) => {
+          if (!line) return;
+          const toks = String(line)
+            .toLowerCase()
+            .replace(/[.,\/\\()«»\-:;"']/g, " ")
+            .split(/\s+/)
+            .filter(Boolean);
+          toks.forEach((t) => {
+            if (/^\d+$/.test(t)) return;
+            if (t.length >= 4) freq[t] = (freq[t] || 0) + 1;
+          });
+        });
+        const top = Object.entries(freq)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 200)
+          .map((x) => x[0]);
+        DICTIONARY = Array.from(new Set(DICTIONARY.concat(top)));
+      }
+
+      const MIN_COMMON = 2;
+      function tokenNearlyEqual(aTok, bTok) {
+        if (!aTok && !bTok) return true;
+        if (!aTok || !bTok) return false;
+        if (aTok === bTok) return true;
+        if (
+          /^size:/.test(aTok) ||
+          /^\d+$/.test(aTok) ||
+          /^size:/.test(bTok) ||
+          /^\d+$/.test(bTok)
+        )
+          return aTok === bTok;
+        const la = aTok.length,
+          lb = bTok.length,
+          maxL = Math.max(la, lb);
+        const dist = levenshtein(aTok, bTok);
+        const threshold =
+          maxL <= 4 ? 1 : maxL <= 8 ? 2 : Math.max(3, Math.ceil(maxL * 0.12));
+        return dist <= threshold;
+      }
+      function namesAreEquivalent(aName, bName) {
+        if (!aName && !bName) return { close: true, tentative: false };
+        if (!aName || !bName) return { close: false, tentative: false };
+        const aKey = makeMatchKey(normalizeName(aName));
+        const bKey = makeMatchKey(normalizeName(bName));
+        if (aKey === bKey) return { close: true, tentative: false };
+        const aTokens = aKey.split(" ").filter(Boolean);
+        const bTokens = bKey.split(" ").filter(Boolean);
+        const aSet = new Set(aTokens),
+          bSet = new Set(bTokens);
+        let exactCommon = 0;
+        for (const t of aSet) if (bSet.has(t)) exactCommon++;
+        if (exactCommon >= MIN_COMMON) return { close: true, tentative: false };
+        const matchedB = new Array(bTokens.length).fill(false);
+        let matchedCount = 0,
+          usedApprox = false;
+        for (const at of aTokens) {
+          let found = false;
+          for (let j = 0; j < bTokens.length; j++) {
+            if (matchedB[j]) continue;
+            if (at === bTokens[j]) {
+              matchedB[j] = true;
+              matchedCount++;
+              found = true;
+              break;
+            }
+          }
+          if (found) continue;
+          for (let j = 0; j < bTokens.length; j++) {
+            if (matchedB[j]) continue;
+            if (tokenNearlyEqual(at, bTokens[j])) {
+              matchedB[j] = true;
+              matchedCount++;
+              usedApprox = true;
+              break;
+            }
+          }
+        }
+        const minNeeded = Math.max(
+          1,
+          Math.ceil(Math.min(aTokens.length, bTokens.length) * 0.6)
+        );
+        if (matchedCount >= minNeeded)
+          return { close: true, tentative: usedApprox };
+        const levWhole = levenshtein(aKey, bKey);
+        const maxLen = Math.max(aKey.length, bKey.length, 1);
+        if (levWhole <= Math.ceil(maxLen * 0.12))
+          return { close: true, tentative: true };
+        return { close: false, tentative: false };
+      }
+      function nameSimilarityPct(aName, bName) {
+        const aNorm = makeMatchKey(normalizeName(aName));
+        const bNorm = makeMatchKey(normalizeName(bName));
+        if (!aNorm && !bNorm) return 100;
+        if (!aNorm || !bNorm) return 0;
+        const aTokens = new Set(aNorm.split(" ").filter(Boolean));
+        const bTokens = new Set(bNorm.split(" ").filter(Boolean));
+        const inter = Array.from(aTokens).filter((t) => bTokens.has(t)).length;
+        if (inter < MIN_COMMON) return 0;
+        const levDist = levenshtein(aNorm, bNorm);
+        const maxLen = Math.max(aNorm.length, bNorm.length, 1);
+        const charScore = Math.max(0, 1 - levDist / maxLen);
+        const tokenScore =
+          inter /
+          Math.min(Math.max(aTokens.size, 1), Math.max(bTokens.size, 1));
+        const combined = tokenScore * 0.85 + charScore * 0.15;
+        return Math.round(combined * 100);
+      }
+
+      function extractNumberValues(str) {
+        const vals = [];
+        if (!str) return vals;
+        const sizeRe = /(\d{1,4})\s*[x×хX]\s*(\d{1,4})(?:[.,]\d+)?/g;
+        let m;
+        while ((m = sizeRe.exec(str)) !== null) {
+          const a = parseFloat(m[1].replace(/\s+/g, ""));
+          const b = parseFloat(m[2].replace(/\s+/g, ""));
+          if (!isNaN(a)) vals.push(a);
+          if (!isNaN(b)) vals.push(b);
+        }
+        const numRe = /(?:(?:\d{1,3}(?:[ \u00A0]\d{3})+)|\d+)(?:[.,]\d+)?/g;
+        while ((m = numRe.exec(str)) !== null) {
+          const token = m[0];
+          const clean = token.replace(/\s+/g, "").replace(",", ".");
+          const n = parseFloat(clean);
+          if (!isNaN(n)) vals.push(n);
+        }
+        return vals;
+      }
+      function numbersEquivalent(n1, n2) {
+        if (!isFinite(n1) || !isFinite(n2)) return false;
+        if (n1 === n2) return true;
+        const absTol = Math.max(
+          0.01,
+          Math.max(Math.abs(n1), Math.abs(n2)) * 0.005
+        );
+        if (Math.abs(n1 - n2) <= absTol) return true;
+        if (n1 === 0 || n2 === 0) return false;
+        const ratio = Math.abs(n1 / n2);
+        const log10 = Math.log10(ratio);
+        const k = Math.round(log10);
+        if (Math.abs(log10 - k) < 1e-6) return true;
+        return false;
+      }
+      function highlightCommonNumbers(a, b) {
+        const escA = escapeHtml(String(a || ""));
+        const escB = escapeHtml(String(b || ""));
+        const valsA = extractNumberValues(a);
+        const valsB = extractNumberValues(b);
+        if (!valsA.length || !valsB.length) return [escA, escB];
+        const common = [];
+        for (const na of valsA)
+          for (const nb of valsB)
+            if (numbersEquivalent(na, nb)) common.push({ na, nb });
+        if (!common.length) return [escA, escB];
+        const combinedRe =
+          /(\d{1,4}\s*[x×хX]\s*\d{1,4}(?:[.,]\d+)?)|(?:(?:\d{1,3}(?:[ \u00A0]\d{3})+)|\d+)(?:[.,]\d+)?/g;
+        function wrapMatches(origStr) {
+          return String(origStr).replace(combinedRe, (token) => {
+            if (/[x×хX]/.test(token)) {
+              return token.replace(/(\d{1,4})/g, (part) => {
+                const n = parseFloat(part.replace(/\s+/g, ""));
+                if (
+                  common.some(
+                    (c) =>
+                      numbersEquivalent(c.na, n) || numbersEquivalent(c.nb, n)
+                  )
+                ) {
+                  return '<span class="num-match">' + part + "</span>";
+                }
+                return part;
+              });
+            }
+            const clean = token.replace(/\s+/g, "").replace(",", ".");
+            const n = parseFloat(clean);
+            if (isNaN(n)) return token;
+            if (
+              common.some(
+                (c) => numbersEquivalent(c.na, n) || numbersEquivalent(c.nb, n)
+              )
+            ) {
+              return '<span class="num-match">' + token + "</span>";
+            }
+            return token;
+          });
+        }
+        return [wrapMatches(escA), wrapMatches(escB)];
+      }
+
+      /* ---------------- RENDERING / STATE ---------------- */
+      let moveState = null;
+      let tableData = null;
+
+      /* независимые снимки */
+      let lastViewBeforeGroup = null;
+      let lastViewBeforeSort = null;
+
+      let groupedBySums = false;
+      let sortSimActive = false;
+
+      let hiddenRemoved = false;
+      let removedHiddenRows = [];
+      let mismatchPointer = -1;
+
+      /* ===================== PERSISTENCE FOR ROW STATES (added) ===================== */
+      const ROW_STATE_KEY = "match_row_state_v1";
+      function loadRowState() {
+        try {
+          const raw = localStorage.getItem(ROW_STATE_KEY);
+          return raw ? JSON.parse(raw) : {};
+        } catch (e) {
+          return {};
+        }
+      }
+      function saveRowState(state) {
+        try {
+          localStorage.setItem(ROW_STATE_KEY, JSON.stringify(state));
+        } catch (e) {}
+      }
+      function keyFromIJ(i, j) {
+        if (j !== null && j !== undefined) return "j:" + String(j);
+        if (i !== null && i !== undefined) return "i:" + String(i);
+        return null;
+      }
+      function keyFromRow(row) {
+        const hasI = row.hasAttribute("data-i");
+        const hasJ = row.hasAttribute("data-j");
+        const i = hasI ? Number(row.getAttribute("data-i")) : null;
+        const j = hasJ ? Number(row.getAttribute("data-j")) : null;
+        return keyFromIJ(i, j);
+      }
+      function applyPersistedStateToBlock(block, persistedMap) {
+        const k = keyFromIJ(
+          typeof block.i === "number" ? block.i : null,
+          typeof block.j === "number" ? block.j : null
+        );
+        if (!k)
+          return { hidden: !!block.hidden, manualYellow: !!block.manualYellow };
+        const st = persistedMap[k];
+        return {
+          hidden:
+            st && typeof st.hidden === "boolean" ? st.hidden : !!block.hidden,
+          manualYellow:
+            st && typeof st.manualYellow === "boolean"
+              ? st.manualYellow
+              : !!block.manualYellow,
+        };
+      }
+      function updateRowStateFromRow(row) {
+        const k = keyFromRow(row);
+        if (!k) return;
+        const st = loadRowState();
+        st[k] = {
+          hidden: row.classList.contains("hidden-text"),
+          manualYellow: row.classList.contains("manual-yellow"),
+        };
+        saveRowState(st);
+      }
+      /* ============================================================================ */
+
+      function renderTable(groupedResult) {
+        tableData = JSON.parse(JSON.stringify(groupedResult || []));
+        mismatchPointer = -1;
+        const out = document.getElementById("output");
+        if (!groupedResult || !groupedResult.length) {
+          out.innerHTML = "<p>Нет данных для отображения.</p>";
+          computeTotals();
+          return;
+        }
+
+        /* load persisted row states once */
+        const persistedStates = loadRowState();
+
+        let html = "";
+        html += "<table><thead><tr>";
+        html +=
+          "<th>#</th><th></th><th>Наименование (1)</th><th>Сумма (1)</th><th>Кол-во (1)</th><th>Наименование (2)</th><th>Сумма (2)</th><th>Кол-во (2)</th><th>Схожесть</th><th></th>";
+        html += "</tr></thead><tbody>";
+        groupedResult.forEach((block) => {
+          const displayNumber =
+            typeof block.j === "number" && block.j !== null
+              ? String(block.j + 1)
+              : "";
+          const rawName1 = block.name1 || "";
+          const rawName2 = block.name2 || "";
+          let [name1Html, name2Html] = highlightCommonNumbers(
+            rawName1,
+            rawName2
+          );
+          name1Html = highlightColorWordsInHtml(name1Html);
+          name2Html = highlightColorWordsInHtml(name2Html);
+          const similarity =
+            block.similarity !== undefined
+              ? block.similarity === null
+                ? "-"
+                : block.similarity + "%"
+              : "-";
+
+          const sum1 =
+            typeof block.sum1 === "number"
+              ? block.sum1
+              : parseSum(String(block.sum1 || "0"));
+          const qty1 =
+            typeof block.qty1 === "number"
+              ? block.qty1
+              : parseSum(String(block.qty1 || "0"));
+          const sum2 =
+            typeof block.sum2 === "number"
+              ? block.sum2
+              : parseSum(String(block.sum2 || "0"));
+          const qty2 =
+            typeof block.qty2 === "number"
+              ? block.qty2
+              : parseSum(String(block.qty2 || "0"));
+          const sumMismatch = Math.abs(sum1 - sum2) > 0.009;
+          const qtyMismatch = Math.abs(qty1 - qty2) > 0.009;
+
+          let classesNoManual = (block.rowClass || "").trim();
+          classesNoManual = classesNoManual
+            .replace(/\bmanual-yellow\b/g, "")
+            .trim();
+          if (sumMismatch)
+            classesNoManual = (classesNoManual + " sum-mismatch").trim();
+          if (qtyMismatch)
+            classesNoManual = (classesNoManual + " qty-mismatch").trim();
+
+          /* >>> apply persisted hidden/manual-yellow here <<< */
+          const eff = applyPersistedStateToBlock(block, persistedStates);
+          if (eff.hidden)
+            classesNoManual = (classesNoManual + " hidden-text").trim();
+          if (block.tentative)
+            classesNoManual = (classesNoManual + " tentative").trim();
+          const manualFlag = eff.manualYellow ? " manual-yellow" : "";
+
+          const dataI =
+            typeof block.i === "number" && block.i !== null
+              ? String(block.i)
+              : "";
+          const dataJ =
+            typeof block.j === "number" && block.j !== null
+              ? String(block.j)
+              : "";
+
+          html +=
+            '<tr draggable="true" class="' +
+            escapeHtml((classesNoManual + manualFlag).trim()) +
+            '" data-hidden="' +
+            (eff.hidden ? "true" : "false") +
+            '" data-row="true"' +
+            (dataI !== "" ? ' data-i="' + dataI + '"' : "") +
+            (dataJ !== "" ? ' data-j="' + dataJ + '"' : "") +
+            ">";
+          html += `<td>${escapeHtml(displayNumber)}</td>`;
+          html +=
+            '<td><button class="hide-btn">▶</button> <button class="move-btn" data-side="left">◀ L</button></td>';
+          html +=
+            '<td class="name-cell" contenteditable="true" spellcheck="false">' +
+            name1Html +
+            "</td>";
+          html +=
+            '<td contenteditable="true" class="edit-sum" data-col="sum1"><span class="sum-wrapper"><span class="sum-text">' +
+            escapeHtml(formatSum(sum1)) +
+            "</span></span></td>";
+          html +=
+            '<td contenteditable="true" class="edit-qty" data-col="qty1"><span class="sum-wrapper"><span class="sum-text">' +
+            escapeHtml(formatQty(qty1)) +
+            "</span></span></td>";
+          html +=
+            '<td class="name-cell" contenteditable="true" spellcheck="false">' +
+            name2Html +
+            "</td>";
+          html +=
+            '<td contenteditable="true" class="edit-sum" data-col="sum2"><span class="sum-wrapper"><span class="sum-text">' +
+            escapeHtml(formatSum(sum2)) +
+            '</span><button class="copy-sum" data-col="sum2" title="Скопировать сумму">◼</button></span></td>';
+          html +=
+            '<td contenteditable="true" class="edit-qty" data-col="qty2"><span class="sum-wrapper"><span class="sum-text">' +
+            escapeHtml(formatQty(qty2)) +
+            '</span><button class="copy-qty" data-col="qty2" title="Скопировать кол-во">◼</button></span></td>';
+          html +=
+            "<td>" +
+            similarity +
+            (block.tentative
+              ? ' <span class="small">(предложено)</span>'
+              : "") +
+            "</td>";
+          html +=
+            '<td><button class="color-btn" aria-pressed="false">🔴</button></td>';
+          html += "</tr>";
+        });
+        html += "</tbody></table>";
+        out.innerHTML = html;
+        attachRowHandlers();
+        attachInlineEdit();
+        attachCopyHandlers();
+        if (moveState) {
+          const rows = Array.from(
+            document.querySelectorAll('tbody tr[data-row="true"]')
+          );
+          if (rows[moveState.row])
+            rows[moveState.row].classList.add("moving-source");
+        }
+        computeTotals();
+      }
+
+      /* ---------------- helpers ---------------- */
+      function escapeHtml(str) {
+        return String(str).replace(
+          /[&<>\"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
+      }
+      function stripHtmlTags(html) {
+        const div = document.createElement("div");
+        div.innerHTML = String(html || "");
+        return div.textContent || div.innerText || "";
+      }
+      function parseSimilarityText(txt) {
+        if (!txt) return null;
+        const m = String(txt).match(/(\d{1,3})\s*%/);
+        if (m) return Number(m[1]);
+        return null;
+      }
+
+      /* --- универсальный снимок текущего DOM-табличного вида --- */
+      function snapshotFromDOM() {
+        const tbody = document.querySelector("tbody");
+        if (!tbody) return [];
+        const rows = Array.from(tbody.children);
+        return rows.map((r) => ({
+          type: "item",
+          name1: stripHtmlTags(r.children[2]?.innerHTML || ""),
+          sum1: parseSum(r.children[3]?.textContent || "0"),
+          qty1: parseSum(r.children[4]?.textContent || "0"),
+          name2: stripHtmlTags(r.children[5]?.innerHTML || ""),
+          sum2: parseSum(r.children[6]?.textContent || "0"),
+          qty2: parseSum(r.children[7]?.textContent || "0"),
+          rowClass: (r.className || "")
+            .replace(/\bmanual-yellow\b/g, "")
+            .trim(),
+          hidden: r.classList.contains("hidden-text"),
+          similarity: parseSimilarityText(r.children[8]?.textContent || ""),
+          tentative: r.classList.contains("tentative"),
+          manualYellow: r.classList.contains("manual-yellow"),
+          i: r.hasAttribute("data-i") ? Number(r.getAttribute("data-i")) : null,
+          j: r.hasAttribute("data-j") ? Number(r.getAttribute("data-j")) : null,
+        }));
+      }
+
+      function updateTextareaLinePreservingEmpty(
+        textareaId,
+        filteredIndex,
+        newText
+      ) {
+        const ta = document.getElementById(textareaId);
+        if (!ta) return;
+        const full = ta.value.split("\n");
+        const nonEmptyIndices = [];
+        for (let k = 0; k < full.length; k++)
+          if (String(full[k]).trim() !== "") nonEmptyIndices.push(k);
+        if (filteredIndex == null || filteredIndex < 0) full.push(newText);
+        else if (filteredIndex < nonEmptyIndices.length)
+          full[nonEmptyIndices[filteredIndex]] = newText;
+        else {
+          while (full.length < filteredIndex) full.push("");
+          full.push(newText);
+        }
+        ta.value = full.join("\n");
+        saveInputs();
+        if (textareaId === "sums2List" || textareaId === "qty2List")
+          computeTotals();
+      }
+
+      /* ---------------- handlers ---------------- */
+      function attachRowHandlers() {
+        const rows = document.querySelectorAll('tbody tr[data-row="true"]');
+        rows.forEach((row, idx) => {
+          if (row.dataset.bound === "1") return;
+          if (
+            row.dataset.hidden === "true" ||
+            row.classList.contains("hidden-text")
+          )
+            row.classList.add("hidden-text");
+
+          const hideBtn = row.querySelector(".hide-btn");
+          if (hideBtn)
+            hideBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const wasHidden = row.classList.contains("hidden-text");
+              row.classList.toggle("hidden-text");
+
+              /* >>> persist hidden state <<< */
+              updateRowStateFromRow(row);
+
+              /* Если сейчас режим "Убрать скрытые строки" — новую скрытую сразу убрать из DOM */
+              if (
+                !wasHidden &&
+                row.classList.contains("hidden-text") &&
+                hiddenRemoved
+              ) {
+                const tbody = row.parentNode;
+                const all = Array.from(tbody.children);
+                const pos = all.indexOf(row);
+                removedHiddenRows.push({ html: row.outerHTML, index: pos });
+                tbody.removeChild(row);
+              }
+
+              computeTotals();
+            });
+
+          const colorBtn = row.querySelector(".color-btn");
+          if (colorBtn) {
+            const isManual = row.classList.contains("manual-yellow");
+            colorBtn.setAttribute("aria-pressed", isManual ? "true" : "false");
+            colorBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const now = row.classList.toggle("manual-yellow");
+              Array.from(row.querySelectorAll("td")).forEach((td) => {
+                if (now) td.classList.add("manual-yellow");
+                else td.classList.remove("manual-yellow");
+              });
+              row.classList.remove("tentative");
+              colorBtn.setAttribute("aria-pressed", now ? "true" : "false");
+
+              /* >>> persist manual-yellow state <<< */
+              updateRowStateFromRow(row);
+            });
+          }
+
+          const moveBtns = row.querySelectorAll(".move-btn");
+          moveBtns.forEach((btn) => {
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const side = "left";
+              const allRows = Array.from(
+                document.querySelectorAll('tbody tr[data-row="true"]')
+              );
+              const rowIndex = allRows.indexOf(row);
+              if (
+                moveState &&
+                moveState.row === rowIndex &&
+                moveState.side === side
+              ) {
+                clearMoveState();
+                return;
+              }
+              clearMoveState();
+              moveState = { row: rowIndex, side };
+              row.classList.add("moving-source");
+            });
+          });
+
+          row.addEventListener("click", (e) => {
+            const nameCell = e.target.closest(".name-cell");
+            if (nameCell) return;
+            if (moveState) {
+              const allRows = Array.from(
+                document.querySelectorAll('tbody tr[data-row="true"]')
+              );
+              const srcRow = allRows[moveState.row];
+              const tgtRow = row;
+              const srcIdx = allRows.indexOf(srcRow);
+              const tgtIdx = allRows.indexOf(tgtRow);
+              if (srcRow && tgtRow && srcIdx !== tgtIdx) {
+                if (moveState.side === "left") swapLeftPair(srcRow, tgtRow);
+                clearMoveState();
+                computeTotals();
+                return;
+              }
+            }
+            rows.forEach((r) => r.classList.remove("selected"));
+            row.classList.add("selected");
+          });
+
+          const nameCells = row.querySelectorAll(".name-cell");
+          nameCells.forEach((td) =>
+            td.addEventListener("click", (e) => {
+              e.stopPropagation();
+              document
+                .querySelectorAll(".name-selected")
+                .forEach((n) => n.classList.remove("name-selected"));
+              document
+                .querySelectorAll("tbody tr.selected")
+                .forEach((r) => r.classList.remove("selected"));
+              td.classList.toggle("name-selected");
+            })
+          );
+
+          row.addEventListener("dragstart", (e) => {
+            row.classList.add("dragging");
+            try {
+              e.dataTransfer.setData(
+                "text/plain",
+                Array.from(rows).indexOf(row)
+              );
+            } catch (ex) {}
+          });
+          row.addEventListener("dragend", () => {
+            row.classList.remove("dragging");
+            rows.forEach((r) => r.classList.remove("drag-over"));
+          });
+          row.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (!row.classList.contains("dragging"))
+              row.classList.add("drag-over");
+          });
+          row.addEventListener("dragleave", () =>
+            row.classList.remove("drag-over")
+          );
+          row.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const srcIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+            const allRows = Array.from(rows);
+            const destIdx = allRows.indexOf(row);
+            if (!isNaN(srcIdx) && srcIdx !== destIdx) {
+              const tbody = row.parentNode;
+              const srcRow = allRows[srcIdx];
+              const refNode = srcIdx < destIdx ? row.nextSibling : row;
+              tbody.insertBefore(srcRow, refNode);
+            }
+            rows.forEach((r) => r.classList.remove("drag-over"));
+            computeTotals();
+          });
+
+          row.dataset.bound = "1";
+        });
+      }
+
+      function swapLeftPair(r1, r2) {
+        const nameIdx = 2,
+          sumIdx = 3,
+          qtyIdx = 4;
+        const aName = r1.children[nameIdx].innerHTML;
+        const aSum = r1.children[sumIdx].textContent;
+        const aQty = r1.children[qtyIdx].textContent;
+        const bName = r2.children[nameIdx].innerHTML;
+        const bSum = r2.children[sumIdx].textContent;
+        const bQty = r2.children[qtyIdx].textContent;
+        r1.children[nameIdx].innerHTML = bName;
+        r1.children[sumIdx].textContent = bSum;
+        r1.children[qtyIdx].textContent = bQty;
+        r2.children[nameIdx].innerHTML = aName;
+        r2.children[sumIdx].textContent = aSum;
+        r2.children[qtyIdx].textContent = aQty;
+        const tmp = r1.getAttribute("data-i");
+        if (r2.hasAttribute("data-i"))
+          r1.setAttribute("data-i", r2.getAttribute("data-i"));
+        else r1.removeAttribute("data-i");
+        if (tmp !== null) r2.setAttribute("data-i", tmp);
+        else r2.removeAttribute("data-i");
+        updateRowSumMismatch(r1);
+        updateRowSumMismatch(r2);
+
+        /* при перестановке — обновим состояние в localStorage */
+        updateRowStateFromRow(r1);
+        updateRowStateFromRow(r2);
+      }
+      function updateRowSumMismatch(row) {
+        const sum1 = parseSum(row.children[3].textContent);
+        const qty1 = parseSum(row.children[4].textContent);
+        const sum2 = parseSum(row.children[6].textContent);
+        const qty2 = parseSum(row.children[7].textContent);
+        const sumMismatch = Math.abs(sum1 - sum2) > 0.009;
+        const qtyMismatch = Math.abs(qty1 - qty2) > 0.009;
+        row.classList.toggle("sum-mismatch", sumMismatch);
+        row.classList.toggle("qty-mismatch", qtyMismatch);
+      }
+      function clearMoveState() {
+        moveState = null;
+        document
+          .querySelectorAll(".moving-source")
+          .forEach((el) => el.classList.remove("moving-source"));
+      }
+
+      /* ---------------- save/load inputs ---------------- */
+      function saveInputs() {
+        const names1 = document.getElementById("namesList").value;
+        const sums1 = document.getElementById("sumsList").value;
+        const qty1 = document.getElementById("qtyList").value;
+        const names2 = document.getElementById("names2List").value;
+        const sums2 = document.getElementById("sums2List").value;
+        const qty2 = document.getElementById("qty2List").value;
+        localStorage.setItem("names1", names1);
+        localStorage.setItem("sums1", sums1);
+        localStorage.setItem("qty1", qty1);
+        localStorage.setItem("names2", names2);
+        localStorage.setItem("sums2", sums2);
+        localStorage.setItem("qty2", qty2);
+      }
+      function loadInputs() {
+        const n1 = localStorage.getItem("names1");
+        const s1 = localStorage.getItem("sums1");
+        const q1 = localStorage.getItem("qty1");
+        const n2 = localStorage.getItem("names2");
+        const s2 = localStorage.getItem("sums2");
+        const q2 = localStorage.getItem("qty2");
+        if (n1 !== null) document.getElementById("namesList").value = n1;
+        if (s1 !== null) document.getElementById("sumsList").value = s1;
+        if (q1 !== null) document.getElementById("qtyList").value = q1;
+        if (n2 !== null) document.getElementById("names2List").value = n2;
+        if (s2 !== null) document.getElementById("sums2List").value = s2;
+        if (q2 !== null) document.getElementById("qty2List").value = q2;
+      }
+
+      /* ---------------- copy sum/qty buttons ---------------- */
+      function attachCopyHandlers() {
+        const copyBtns = document.querySelectorAll(
+          '.copy-sum[data-col="sum2"], .copy-qty[data-col="qty2"]'
+        );
+        copyBtns.forEach((btn) => {
+          if (btn.dataset.bound === "1") return;
+          btn.dataset.bound = "1";
+          btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const row = btn.closest("tr");
+            if (!row) return;
+            const col = btn.getAttribute("data-col");
+            let textToCopy = "";
+            if (col === "sum2") {
+              const sumTextEl = row.querySelector(
+                "td[data-col='sum2'] .sum-text"
+              );
+              textToCopy = sumTextEl
+                ? sumTextEl.textContent.trim()
+                : row.children[6].textContent.trim();
+            } else if (col === "qty2") {
+              const qtyTextEl = row.querySelector(
+                "td[data-col='qty2'] .sum-text"
+              );
+              textToCopy = qtyTextEl
+                ? qtyTextEl.textContent.trim()
+                : row.children[7].textContent.trim();
+            } else {
+              textToCopy = row.children[6]
+                ? row.children[6].textContent.trim()
+                : "";
+            }
+            if (!textToCopy) return;
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText)
+                await navigator.clipboard.writeText(textToCopy);
+              else {
+                const ta = document.createElement("textarea");
+                ta.value = textToCopy;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                ta.remove();
+              }
+              const prev = btn.textContent;
+              btn.textContent = "✓";
+              setTimeout(() => (btn.textContent = prev), 800);
+            } catch (err) {
+              const prev = btn.textContent;
+              btn.textContent = "✕";
+              setTimeout(() => (btn.textContent = prev), 800);
+            }
+          });
+        });
+      }
+
+      /* ---------------- focus box ---------------- */
+      let focusActive = false;
+      const focusBtn = document.getElementById("toggleFocusBtn");
+      const focusBox = document.getElementById("focusBox");
+      function onMouseMove(e) {
+        focusBox.style.width = window.innerWidth + "px";
+        focusBox.style.height = "400px";
+        focusBox.style.left = "0px";
+        focusBox.style.top = e.pageY + 10 + "px";
+      }
+      focusBtn.addEventListener("click", () => {
+        focusActive = !focusActive;
+        if (focusActive) {
+          focusBox.style.display = "block";
+          document.addEventListener("mousemove", onMouseMove);
+          focusBtn.textContent = "✖ Скрыть фокус";
+        } else {
+          focusBox.style.display = "none";
+          document.removeEventListener("mousemove", onMouseMove);
+          focusBtn.textContent = "🔍 Фокус";
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") clearMoveState();
+      });
+
+      /* ---------------- load saved table state if exists ---------------- */
+      window.addEventListener("load", () => {
+        loadInputs();
+        const saved = localStorage.getItem("tableState"); // опционально
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            const restored = parsed.map((r) => ({
+              type: "item",
+              name1: r.name1 || "",
+              sum1: Number(r.sum1) || 0,
+              qty1: Number(r.qty1) || 0,
+              name2: r.name2 || "",
+              sum2: Number(r.sum2) || 0,
+              qty2: Number(r.qty2) || 0,
+              rowClass: r.rowClass || "",
+              hidden: !!r.hidden,
+              similarity:
+                typeof r.similarity === "number" ? r.similarity : null,
+              tentative: !!r.tentative,
+              manualYellow: !!r.manualYellow,
+              i: typeof r.i === "number" ? r.i : null,
+              j: typeof r.j === "number" ? r.j : null,
+            }));
+            groupedBySums = false;
+            sortSimActive = false;
+            document.getElementById("groupSumsBtn").textContent =
+              "Сгруппировать по суммам";
+            document.getElementById("sortSimBtn").textContent =
+              "Сортировать по схожести";
+            renderTable(restored);
+            return;
+          } catch (e) {
+            console.error("Ошибка чтения tableState:", e);
+          }
+        }
+        computeTotals();
+      });
+
+      /* ---------------- PROCESS button ---------------- */
+      document.getElementById("processBtn").addEventListener("click", () => {
+        const rawNames1Lines = document
+          .getElementById("namesList")
+          .value.split("\n");
+        const rawSums1Lines = document
+          .getElementById("sumsList")
+          .value.split("\n");
+        const rawQty1Lines = document
+          .getElementById("qtyList")
+          .value.split("\n");
+        const rawNames2Lines = document
+          .getElementById("names2List")
+          .value.split("\n");
+        const rawSums2Lines = document
+          .getElementById("sums2List")
+          .value.split("\n");
+        const rawQty2Lines = document
+          .getElementById("qty2List")
+          .value.split("\n");
+
+        const names1 = rawNames1Lines.map((l) => l.trim()).filter(Boolean);
+        const sums1 = rawSums1Lines.map((l) => l.trim()).filter(Boolean);
+        const qty1 = rawQty1Lines.map((l) => l.trim());
+        const names2 = rawNames2Lines.map((l) => l.trim()).filter(Boolean);
+        const sums2 = rawSums2Lines.map((l) => l.trim()).filter(Boolean);
+        const qty2 = rawQty2Lines.map((l) => l.trim());
+
+        if (names1.length !== sums1.length || names2.length !== sums2.length) {
+          alert(
+            "Количество строк в каждом списке имен и сумм должно совпадать."
+          );
+          return;
+        }
+        const qty1HasData = qty1.some((x) => String(x || "").trim() !== "");
+        const qty2HasData = qty2.some((x) => String(x || "").trim() !== "");
+        if (
+          qty1HasData &&
+          qty1.filter((x) => String(x || "").trim() !== "").length !==
+            names1.length
+        ) {
+          alert(
+            "Если указаны количества (левый список), их строк должно быть столько же, сколько наименований в левом списке."
+          );
+          return;
+        }
+        if (
+          qty2HasData &&
+          qty2.filter((x) => String(x || "").trim() !== "").length !==
+            names2.length
+        ) {
+          alert(
+            "Если указаны количества (правый список), их строк должно быть столько же, сколько наименований в правом списке."
+          );
+          return;
+        }
+
+        saveInputs();
+        learnDictionaryFromCorpus(names1.concat(names2));
+
+        const list1 = names1.map((n, i) => ({
+          name: n,
+          sum: parseSum(sums1[i]),
+          qty: qty1[i] ? parseSum(qty1[i]) : 0,
+        }));
+        const list2 = names2.map((n, i) => ({
+          name: n,
+          sum: parseSum(sums2[i]),
+          qty: qty2[i] ? parseSum(qty2[i]) : 0,
+        }));
+
+        const pairs = [];
+        list1.forEach((a, i) =>
+          list2.forEach((b, j) => {
+            const sumDiff = Math.abs(a.sum - b.sum);
+            const sumThreshold = Math.max(
+              0.01,
+              Math.min(Math.abs(a.sum), Math.abs(b.sum)) * 0.01
+            );
+            const nameMatch = namesAreEquivalent(a.name, b.name);
+            pairs.push({
+              i,
+              j,
+              sumDiff,
+              sumThreshold,
+              nameClose: nameMatch.close,
+              nameTentative: nameMatch.tentative,
+            });
+          })
+        );
+
+        const usedI = new Set(),
+          usedJ = new Set(),
+          selectedPairs = [];
+        pairs.sort((a, b) =>
+          a.nameClose === b.nameClose
+            ? a.sumDiff - b.sumDiff
+            : a.nameClose
+            ? -1
+            : 1
+        );
+        function isNameClose(p) {
+          return p.nameClose;
+        }
+        function isSumClose(p) {
+          return p.sumDiff <= p.sumThreshold;
+        }
+
+        for (const p of pairs) {
+          if (
+            !usedI.has(p.i) &&
+            !usedJ.has(p.j) &&
+            isNameClose(p) &&
+            isSumClose(p)
+          ) {
+            usedI.add(p.i);
+            usedJ.add(p.j);
+            selectedPairs.push(p);
+          }
+        }
+        for (const p of pairs) {
+          if (
+            !usedI.has(p.i) &&
+            !usedJ.has(p.j) &&
+            isNameClose(p) &&
+            !isSumClose(p)
+          ) {
+            usedI.add(p.i);
+            usedJ.add(p.j);
+            selectedPairs.push(p);
+          }
+        }
+        for (const p of pairs) {
+          if (
+            !usedI.has(p.i) &&
+            !usedJ.has(p.j) &&
+            !isNameClose(p) &&
+            isSumClose(p)
+          ) {
+            usedI.add(p.i);
+            usedJ.add(p.j);
+            selectedPairs.push(p);
+          }
+        }
+        for (const p of pairs) {
+          if (!usedI.has(p.i) && !usedJ.has(p.j)) {
+            usedI.add(p.i);
+            usedJ.add(p.j);
+            selectedPairs.push(p);
+          }
+        }
+
+        const orderedResult = [];
+        const pairByJ = {};
+        selectedPairs.forEach((p) => {
+          pairByJ[p.j] = p;
+        });
+
+        for (let j = 0; j < list2.length; j++) {
+          if (Object.prototype.hasOwnProperty.call(pairByJ, j)) {
+            const p = pairByJ[j];
+            const a = list1[p.i];
+            const b = list2[p.j];
+            const pct = nameSimilarityPct(a.name, b.name);
+            orderedResult.push({
+              type: "item",
+              name1: a.name,
+              sum1: a.sum,
+              qty1: a.qty,
+              name2: b.name,
+              sum2: b.sum,
+              qty2: b.qty,
+              rowClass: p.nameClose ? "matched" : "",
+              hidden: false,
+              similarity: pct,
+              tentative: !!p.nameTentative,
+              i: p.i,
+              j: p.j,
+              manualYellow: false,
+            });
+          } else {
+            const b = list2[j];
+            orderedResult.push({
+              type: "item",
+              name1: "-",
+              sum1: 0,
+              qty1: 0,
+              name2: b.name,
+              sum2: b.sum,
+              qty2: b.qty,
+              rowClass: "grp-right-only",
+              hidden: false,
+              similarity: null,
+              tentative: false,
+              i: null,
+              j: j,
+              manualYellow: false,
+            });
+          }
+        }
+        for (let i = 0; i < list1.length; i++) {
+          if (!usedI.has(i)) {
+            const a = list1[i];
+            orderedResult.push({
+              type: "item",
+              name1: a.name,
+              sum1: a.sum,
+              qty1: a.qty,
+              name2: "-",
+              sum2: 0,
+              qty2: 0,
+              rowClass: "grp-left-only",
+              hidden: false,
+              similarity: null,
+              tentative: false,
+              i: i,
+              j: null,
+              manualYellow: false,
+            });
+          }
+        }
+
+        // обновляем левую колонку в текстовых полях в новом порядке
+        const newLeftOrderIndices = [];
+        const seenLeft = new Set();
+        orderedResult.forEach((it) => {
+          if (
+            typeof it.i === "number" &&
+            it.i !== null &&
+            !seenLeft.has(it.i)
+          ) {
+            newLeftOrderIndices.push(it.i);
+            seenLeft.add(it.i);
+          }
+        });
+        for (let i = 0; i < list1.length; i++)
+          if (!seenLeft.has(i)) {
+            newLeftOrderIndices.push(i);
+            seenLeft.add(i);
+          }
+        const newNames1 = newLeftOrderIndices.map((i) => list1[i].name);
+        const newSums1 = newLeftOrderIndices.map((i) =>
+          formatSum(list1[i].sum)
+        );
+        const newQty1 = newLeftOrderIndices.map((i) => formatQty(list1[i].qty));
+        document.getElementById("namesList").value = newNames1.join("\n");
+        document.getElementById("sumsList").value = newSums1.join("\n");
+        document.getElementById("qtyList").value = newQty1.join("\n");
+        saveInputs();
+
+        // сбрасываем состояния снимков
+        lastViewBeforeGroup = null;
+        lastViewBeforeSort = null;
+        groupedBySums = false;
+        sortSimActive = false;
+        document.getElementById("groupSumsBtn").textContent =
+          "Сгруппировать по суммам";
+        document.getElementById("sortSimBtn").textContent =
+          "Сортировать по схожести";
+
+        renderTable(orderedResult);
+      });
+
+      /* ---------------- inline edit ---------------- */
+      function attachInlineEdit() {
+        const editable = document.querySelectorAll(".edit-sum, .edit-qty");
+        editable.forEach((el) => {
+          if (el.dataset.bound === "1") return;
+          el.addEventListener("blur", () => {
+            const sumTextEl = el.querySelector(".sum-text");
+            const raw = sumTextEl
+              ? sumTextEl.textContent.trim()
+              : el.textContent.trim();
+            const parsed = parseSum(raw);
+            const col = el.dataset.col;
+            if (col === "sum1" || col === "sum2") {
+              if (sumTextEl) sumTextEl.textContent = formatSum(parsed);
+              else el.textContent = formatSum(parsed);
+            } else {
+              if (sumTextEl) sumTextEl.textContent = formatQty(parsed);
+              else el.textContent = formatQty(parsed);
+            }
+
+            const row = el.closest("tr");
+            if (row) {
+              updateRowSumMismatch(row);
+              if (col === "sum1" && row.hasAttribute("data-i")) {
+                const i = Number(row.getAttribute("data-i"));
+                updateTextareaLinePreservingEmpty(
+                  "sumsList",
+                  i,
+                  formatSum(parsed)
+                );
+              } else if (col === "sum2" && row.hasAttribute("data-j")) {
+                const j = Number(row.getAttribute("data-j"));
+                updateTextareaLinePreservingEmpty(
+                  "sums2List",
+                  j,
+                  formatSum(parsed)
+                );
+                computeTotals();
+              } else if (col === "qty1" && row.hasAttribute("data-i")) {
+                const i = Number(row.getAttribute("data-i"));
+                updateTextareaLinePreservingEmpty(
+                  "qtyList",
+                  i,
+                  formatQty(parsed)
+                );
+              } else if (col === "qty2" && row.hasAttribute("data-j")) {
+                const j = Number(row.getAttribute("data-j"));
+                updateTextareaLinePreservingEmpty(
+                  "qty2List",
+                  j,
+                  formatQty(parsed)
+                );
+                computeTotals();
+              }
+              attachCopyHandlers();
+            }
+            computeTotals();
+          });
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              el.blur();
+            }
+          });
+          el.dataset.bound = "1";
+        });
+
+        const nameCells = document.querySelectorAll(".name-cell");
+        nameCells.forEach((el) => {
+          if (el.dataset.bound === "1") return;
+          el.setAttribute("contenteditable", "true");
+          el.setAttribute("spellcheck", "false");
+          el.addEventListener("blur", () => {
+            const row = el.closest("tr");
+            if (!row) return;
+            const leftText = stripHtmlTags(row.children[2].innerHTML);
+            const rightText = stripHtmlTags(row.children[5].innerHTML);
+            const [leftHtml, rightHtml] = highlightCommonNumbers(
+              leftText,
+              rightText
+            );
+            row.children[2].innerHTML = highlightColorWordsInHtml(leftHtml);
+            row.children[5].innerHTML = highlightColorWordsInHtml(rightHtml);
+            const tentative = row.classList.contains("tentative");
+            const pct =
+              leftText || rightText
+                ? nameSimilarityPct(leftText, rightText)
+                : null;
+            row.children[8].innerHTML =
+              (pct === null ? "-" : pct + "%") +
+              (tentative ? ' <span class="small">(предложено)</span>' : "");
+            if (row.hasAttribute("data-i")) {
+              const i = Number(row.getAttribute("data-i"));
+              updateTextareaLinePreservingEmpty("namesList", i, leftText);
+            }
+            if (row.hasAttribute("data-j")) {
+              const j = Number(row.getAttribute("data-j"));
+              updateTextareaLinePreservingEmpty("names2List", j, rightText);
+            }
+          });
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              el.blur();
+            }
+          });
+          el.dataset.bound = "1";
+        });
+      }
+
+      [
+        "namesList",
+        "sumsList",
+        "qtyList",
+        "names2List",
+        "sums2List",
+        "qty2List",
+      ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", saveInputs);
+      });
+
+      /* ---------------- group by second sum (toggle) ---------------- */
+      function groupRowsBySecondSumOnly(data) {
+        const counts = new Map();
+        data.forEach((item) => {
+          const s2 =
+            Number(
+              typeof item.sum2 === "number"
+                ? item.sum2
+                : parseSum(item.sum2 || 0)
+            ) || 0;
+          const key = String(s2);
+          counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        const dupSums = new Set(
+          Array.from(counts.entries())
+            .filter(([k, v]) => v > 1)
+            .map(([k]) => k)
+        );
+        if (dupSums.size === 0) return data.slice();
+        const firstIndex = new Map();
+        data.forEach((item, idx) => {
+          const k = String(
+            Number(
+              typeof item.sum2 === "number"
+                ? item.sum2
+                : parseSum(item.sum2 || 0)
+            ) || 0
+          );
+          if (dupSums.has(k) && !firstIndex.has(k)) firstIndex.set(k, idx);
+        });
+        const dupSumsOrdered = Array.from(dupSums).sort(
+          (a, b) => firstIndex.get(a) - firstIndex.get(b)
+        );
+        const result = [];
+        const movedIndices = new Set();
+        dupSumsOrdered.forEach((sumKey) => {
+          data.forEach((row, idx) => {
+            const k = String(
+              Number(
+                typeof row.sum2 === "number"
+                  ? row.sum2
+                  : parseSum(row.sum2 || 0)
+              ) || 0
+            );
+            if (k === sumKey) {
+              result.push(row);
+              movedIndices.add(idx);
+            }
+          });
+        });
+        data.forEach((row, idx) => {
+          if (!movedIndices.has(idx)) result.push(row);
+        });
+        return result;
+      }
+
+      document.getElementById("groupSumsBtn").addEventListener("click", () => {
+        if (!tableData || !tableData.length) return;
+        const btn = document.getElementById("groupSumsBtn");
+        if (!groupedBySums) {
+          /* сохраняем ПОСЛЕДНИЙ ВИД перед группировкой */
+          lastViewBeforeGroup = snapshotFromDOM();
+          const grouped = groupRowsBySecondSumOnly(snapshotFromDOM());
+          renderTable(grouped);
+          groupedBySums = true;
+          btn.textContent = "Вернуть исходный порядок";
+        } else {
+          /* возвращаем именно последний вид */
+          renderTable(lastViewBeforeGroup || snapshotFromDOM());
+          groupedBySums = false;
+          btn.textContent = "Сгруппировать по суммам";
+          /* снимок оставляем — можно снова сгруппировать и вернуться */
+        }
+      });
+
+      /* ---------------- sort by similarity (toggle) ---------------- */
+      document.getElementById("sortSimBtn").addEventListener("click", () => {
+        if (!tableData || !tableData.length) return;
+        const btn = document.getElementById("sortSimBtn");
+        if (!sortSimActive) {
+          lastViewBeforeSort = snapshotFromDOM(); /* сохраняем последний вид */
+          const toSort = snapshotFromDOM().map((r) => {
+            const left = r.name1 || "",
+              right = r.name2 || "";
+            const pct = nameSimilarityPct(left, right) || 0;
+            return Object.assign({}, r, { similarity: pct });
+          });
+          toSort.sort((a, b) => a.similarity - b.similarity);
+          renderTable(toSort);
+          sortSimActive = true;
+          btn.textContent = "Вернуть порядок";
+        } else {
+          renderTable(lastViewBeforeSort || snapshotFromDOM());
+          sortSimActive = false;
+          btn.textContent = "Сортировать по схожести";
+        }
+      });
+
+      /* ---------------- remove/restore hidden rows ---------------- */
+      document
+        .getElementById("removeHiddenBtn")
+        .addEventListener("click", () => {
+          const tbody = document.querySelector("tbody");
+          if (!tbody) return;
+          const btn = document.getElementById("removeHiddenBtn");
+          if (!hiddenRemoved) {
+            removedHiddenRows = [];
+            const rows = Array.from(tbody.children);
+            for (let idx = 0; idx < rows.length; idx++) {
+              const r = rows[idx];
+              if (r.classList.contains("hidden-text"))
+                removedHiddenRows.push({ html: r.outerHTML, index: idx });
+            }
+            for (let k = removedHiddenRows.length - 1; k >= 0; k--) {
+              const item = removedHiddenRows[k];
+              const rowsNow = tbody.children;
+              if (rowsNow[item.index]) tbody.removeChild(rowsNow[item.index]);
+              else {
+                const found = Array.from(tbody.children).find((ch) =>
+                  ch.classList.contains("hidden-text")
+                );
+                if (found) tbody.removeChild(found);
+              }
+            }
+            hiddenRemoved = true;
+            btn.textContent = "Вернуть скрытые строки";
+            computeTotals();
+          } else {
+            const rowsNow = tbody.children;
+            removedHiddenRows
+              .sort((a, b) => a.index - b.index)
+              .forEach((item) => {
+                const temp = document.createElement("tbody");
+                temp.innerHTML = item.html.trim();
+                const newRow = temp.firstChild;
+                const insertBeforeNode =
+                  rowsNow.length > item.index ? rowsNow[item.index] : null;
+                if (insertBeforeNode)
+                  tbody.insertBefore(newRow, insertBeforeNode);
+                else tbody.appendChild(newRow);
+              });
+            removedHiddenRows = [];
+            hiddenRemoved = false;
+            btn.textContent = "Убрать скрытые строки";
+            attachRowHandlers();
+            attachInlineEdit();
+            attachCopyHandlers();
+            computeTotals();
+          }
+        });
+
+      /* ---------------- totals & mismatch tools ---------------- */
+      function computeTotals() {
+        // left
+        const taSumL = document.getElementById("sumsList");
+        const taQtyL = document.getElementById("qtyList");
+        let totalSumL = 0,
+          totalQtyL = 0;
+        if (taSumL && String(taSumL.value || "").trim() !== "") {
+          const lines = taSumL.value.split("\n");
+          for (const ln of lines) {
+            const t = String(ln || "").trim();
+            if (t === "") continue;
+            totalSumL += parseSum(t);
+          }
+        } else {
+          const rows = document.querySelectorAll('tbody tr[data-row="true"]');
+          rows.forEach((r) => {
+            const s = r.children[3] ? r.children[3].textContent : "";
+            totalSumL += parseSum(s);
+          });
+        }
+        if (taQtyL && String(taQtyL.value || "").trim() !== "") {
+          const lines = taQtyL.value.split("\n");
+          for (const ln of lines) {
+            const t = String(ln || "").trim();
+            if (t === "") continue;
+            totalQtyL += parseSum(t);
+          }
+        } else {
+          const rows = document.querySelectorAll('tbody tr[data-row="true"]');
+          rows.forEach((r) => {
+            const q = r.children[4] ? r.children[4].textContent : "";
+            totalQtyL += parseSum(q);
+          });
+        }
+
+        // right
+        const taSumR = document.getElementById("sums2List");
+        const taQtyR = document.getElementById("qty2List");
+        let totalSumR = 0,
+          totalQtyR = 0;
+        if (taSumR && String(taSumR.value || "").trim() !== "") {
+          const lines = taSumR.value.split("\n");
+          for (const ln of lines) {
+            const t = String(ln || "").trim();
+            if (t === "") continue;
+            totalSumR += parseSum(t);
+          }
+        } else {
+          const rows = document.querySelectorAll('tbody tr[data-row="true"]');
+          rows.forEach((r) => {
+            const s = r.children[6] ? r.children[6].textContent : "";
+            totalSumR += parseSum(s);
+          });
+        }
+        if (taQtyR && String(taQtyR.value || "").trim() !== "") {
+          const lines = taQtyR.value.split("\n");
+          for (const ln of lines) {
+            const t = String(ln || "").trim();
+            if (t === "") continue;
+            totalQtyR += parseSum(t);
+          }
+        } else {
+          const rows = document.querySelectorAll('tbody tr[data-row="true"]');
+          rows.forEach((r) => {
+            const q = r.children[7] ? r.children[7].textContent : "";
+            totalQtyR += parseSum(q);
+          });
+        }
+
+        const elTopLeftSum = document.getElementById("topLeftSum");
+        const elTopLeftQty = document.getElementById("topLeftQty");
+        const elTopRightSum = document.getElementById("topRightSum");
+        const elTopRightQty = document.getElementById("topRightQty");
+
+        elTopLeftSum.textContent = formatSum(totalSumL);
+        elTopLeftQty.textContent = formatQty(totalQtyL);
+        elTopRightSum.textContent = formatSum(totalSumR);
+        elTopRightQty.textContent = formatQty(totalQtyR);
+
+        const sumMismatch = Math.abs(totalSumL - totalSumR) > 0.009;
+        const qtyMismatch = Math.abs(totalQtyL - totalQtyR) > 0.009;
+
+        if (sumMismatch) {
+          elTopLeftSum.classList.add("totals-sum-mismatch");
+          elTopRightSum.classList.add("totals-sum-mismatch");
+        } else {
+          elTopLeftSum.classList.remove("totals-sum-mismatch");
+          elTopRightSum.classList.remove("totals-sum-mismatch");
+        }
+
+        if (qtyMismatch) {
+          elTopLeftQty.classList.add("totals-qty-mismatch");
+          elTopRightQty.classList.add("totals-qty-mismatch");
+        } else {
+          elTopLeftQty.classList.remove("totals-qty-mismatch");
+          elTopRightQty.classList.remove("totals-qty-mismatch");
+        }
+      }
+
+      (function attachSums2InputHandler() {
+        const el = document.getElementById("sums2List");
+        if (!el) return;
+        el.addEventListener("input", () => computeTotals());
+        el.addEventListener("change", () => {
+          saveInputs();
+          computeTotals();
+        });
+      })();
+      (function attachQty2InputHandler() {
+        const el = document.getElementById("qty2List");
+        if (!el) return;
+        el.addEventListener("input", () => computeTotals());
+        el.addEventListener("change", () => {
+          saveInputs();
+          computeTotals();
+        });
+      })();
+
+      document.addEventListener("click", (e) => {
+        const tag = e.target.tagName.toLowerCase();
+        if (["input", "textarea"].indexOf(tag) === -1) computeTotals();
+      });
+
+      document
+        .getElementById("toggleThemeBtn")
+        .addEventListener("click", () => {
+          const dark = !document.documentElement.classList.contains("dark");
+          document.documentElement.classList.toggle("dark", dark);
+          localStorage.setItem("darkMode", dark);
+          document.getElementById("toggleThemeBtn").textContent = dark
+            ? "☀️ Светлый режим"
+            : "🌙 Темный режим";
+        });
+
+      function getVisibleMismatchRows() {
+        const rows = Array.from(
+          document.querySelectorAll(
+            'tbody tr[data-row="true"]:not(.hidden-text)'
+          )
+        );
+        return rows.filter(
+          (r) =>
+            r.classList.contains("sum-mismatch") ||
+            r.classList.contains("qty-mismatch")
+        );
+      }
+      function flashRowAndCells(row) {
+        if (!row) return;
+        row.classList.remove("mismatch-focus");
+        row.offsetWidth;
+        row.classList.add("mismatch-focus");
+        setTimeout(() => row.classList.remove("mismatch-focus"), 900);
+
+        const sumCells = [row.children[3], row.children[6]];
+        const qtyCells = [row.children[4], row.children[7]];
+        const doSum = row.classList.contains("sum-mismatch");
+        const doQty = row.classList.contains("qty-mismatch");
+        const toFlash = [];
+        if (doSum) toFlash.push(...sumCells);
+        if (doQty) toFlash.push(...qtyCells);
+        toFlash.forEach((td) => {
+          if (!td) return;
+          td.classList.add("cell-flash");
+          setTimeout(() => td.classList.remove("cell-flash"), 1200);
+        });
+      }
+      document
+        .getElementById("gotoMismatchBtn")
+        .addEventListener("click", () => {
+          const mismatches = getVisibleMismatchRows();
+          if (!mismatches || mismatches.length === 0) {
+            alert("Несходящие строки не найдены.");
+            mismatchPointer = -1;
+            return;
+          }
+          mismatchPointer == (mismatchPointer + 1) % mismatches.length;
+          const target = mismatches[mismatchPointer];
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            flashRowAndCells(target);
+            document
+              .querySelectorAll("tbody tr")
+              .forEach((r) => r.classList.remove("selected"));
+            target.classList.add("selected");
+            setTimeout(() => target.classList.remove("selected"), 900);
+          }
+        });
+
+      // color-word highlighting
+      const COLOR_STEMS = [
+        "коричn",
+        "корич",
+        "кор",
+        "коричн",
+        "коричн",
+        "бел",
+        "зел",
+        "зелен",
+        "черн",
+        "чёрн",
+        "сер",
+        "сера",
+        "красн",
+        "крас",
+        "фиолет",
+        "фиол",
+        "роз",
+        "розов",
+        "син",
+        "сине",
+        "жёлт",
+        "желт",
+        "оранж",
+        "бирюз",
+        "голуб",
+        "беж",
+        "бежев",
+      ];
+      const COLOR_REGEX = new RegExp(
+        "(?<![\\p{L}\\p{N}_-])(" +
+          COLOR_STEMS.map((s) =>
+            s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
+          ).join("|") +
+          ")[а-яё]*?(?![\\p{L}\\p{N}_-])",
+        "giu"
+      );
+      function highlightColorWordsInHtml(html) {
+        if (!html) return html;
+        const container = document.createElement("div");
+        container.innerHTML = html;
+        function walk(node) {
+          for (let i = 0; i < node.childNodes.length; i++) {
+            const child = node.childNodes[i];
+            if (child.nodeType === Node.TEXT_NODE) {
+              const text = child.nodeValue;
+              COLOR_REGEX.lastIndex = 0;
+              if (!COLOR_REGEX.test(text)) continue;
+              const frag = document.createDocumentFragment();
+              let lastIndex = 0;
+              COLOR_REGEX.lastIndex = 0;
+              let m;
+              while ((m = COLOR_REGEX.exec(text)) !== null) {
+                const idx = m.index;
+                if (idx > lastIndex)
+                  frag.appendChild(
+                    document.createTextNode(text.slice(lastIndex, idx))
+                  );
+                const span = document.createElement("span");
+                span.className = "color-word";
+                span.textContent = m[0];
+                frag.appendChild(span);
+                lastIndex = COLOR_REGEX.lastIndex;
+              }
+              if (lastIndex < text.length)
+                frag.appendChild(
+                  document.createTextNode(text.slice(lastIndex))
+                );
+              node.replaceChild(frag, child);
+              i += frag.childNodes ? frag.childNodes.length - 1 : 0;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+              if (child.classList && child.classList.contains("color-word"))
+                continue;
+              walk(child);
+            }
+          }
+        }
+        walk(container);
+        return container.innerHTML;
+      }
+    </script>
+  </body>
+</html>
